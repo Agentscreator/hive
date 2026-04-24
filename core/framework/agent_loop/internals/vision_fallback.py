@@ -55,13 +55,43 @@ _TOOL_ARGS_MAX_CHARS = 4096
 # Subagent system prompt — kept short so it fits within any provider's
 # system-prompt budget alongside the user message + image. Tells the
 # subagent its role and constrains output format.
+#
+# Coordinate labeling: the main agent's browser tools
+# (browser_click_coordinate / browser_hover_coordinate / browser_press_at)
+# accept VIEWPORT FRACTIONS (x, y) in [0..1] where (0,0) is the top-left
+# and (1,1) is the bottom-right of the screenshot. Without coordinates
+# the text-only agent has no way to act on what we describe — it can
+# read the caption but cannot point. So for every interactive element
+# we name (button, link, input, icon, tab, menu item, dialog control),
+# include its approximate viewport-fraction centre as ``(fx, fy)``
+# right after the element's name, e.g. ``"Submit" button (0.83, 0.92)``.
+# Three rules: (1) coordinates only for things plausibly clickable /
+# hoverable / typeable — don't tag pure body text or decorative
+# graphics. (2) Eyeball to two decimal places; precision beyond that
+# is false confidence. (3) Never invent — if an element is partly
+# off-screen or you can't locate it, omit the coordinate rather than
+# guessing.
 _VISION_SUBAGENT_SYSTEM = (
     "You are a vision subagent for a text-only main agent. The main "
     "agent invoked a tool that returned the image(s) attached. Their "
     "intent (their reasoning + the tool call) is below. Describe what "
     "the image shows in service of their intent — concrete, factual, "
     "no speculation. If their intent asks a yes/no question, answer it "
-    "directly first. Output plain text, no markdown, ≤ 600 words."
+    "directly first.\n\n"
+    "Coordinate labeling: the main agent uses fractional viewport "
+    "coordinates (x, y) in [0..1] — (0, 0) is the top-left of the "
+    "image, (1, 1) is the bottom-right — to drive its click / hover / "
+    "key-press tools. For every interactive element you mention "
+    "(button, link, input, checkbox, radio, dropdown, tab, menu item, "
+    "dialog control, icon), append its approximate centre as "
+    "``(fx, fy)`` immediately after the element's name or label, e.g. "
+    '``"Submit" button (0.83, 0.92)`` or ``profile avatar icon '
+    "(0.05, 0.07)``. Use two decimal places — more is false precision. "
+    "Skip coordinates for pure body text and decorative elements that "
+    "aren't clickable. If an element is partially off-screen or you "
+    "cannot reliably locate its centre, omit the coordinate rather "
+    "than guessing.\n\n"
+    "Output plain text, no markdown, ≤ 600 words."
 )
 
 
