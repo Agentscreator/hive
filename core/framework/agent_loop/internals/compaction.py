@@ -657,8 +657,10 @@ def write_compaction_debug_log(
     level: str,
     inventory: list[dict[str, Any]] | None,
 ) -> None:
-    """Write detailed compaction analysis to ~/.hive/compaction_log/."""
-    log_dir = Path.home() / ".hive" / "compaction_log"
+    """Write detailed compaction analysis to $HIVE_HOME/compaction_log/."""
+    from framework.config import HIVE_HOME
+
+    log_dir = HIVE_HOME / "compaction_log"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%f")

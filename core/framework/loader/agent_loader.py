@@ -558,7 +558,9 @@ ANTIGRAVITY_IDE_STATE_DB = (
 # Linux fallback for the IDE state DB
 ANTIGRAVITY_IDE_STATE_DB_LINUX = Path.home() / ".config" / "Antigravity" / "User" / "globalStorage" / "state.vscdb"
 # Antigravity credentials stored by native OAuth implementation
-ANTIGRAVITY_AUTH_FILE = Path.home() / ".hive" / "antigravity-accounts.json"
+from framework.config import HIVE_HOME as _HIVE_HOME
+
+ANTIGRAVITY_AUTH_FILE = _HIVE_HOME / "antigravity-accounts.json"
 
 ANTIGRAVITY_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _ANTIGRAVITY_TOKEN_LIFETIME_SECS = 3600  # Google access tokens expire in 1 hour
@@ -1389,7 +1391,7 @@ class AgentLoader:
         )
 
         if storage_path is None:
-            storage_path = Path.home() / ".hive" / "agents" / agent_path.name / worker_name
+            storage_path = _HIVE_HOME / "agents" / agent_path.name / worker_name
             storage_path.mkdir(parents=True, exist_ok=True)
 
         runner = cls(

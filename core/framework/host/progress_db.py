@@ -264,7 +264,9 @@ def ensure_all_colony_dbs(colonies_root: Path | None = None) -> list[Path]:
     run the stale-claim reclaimer on all of them in one pass.
     """
     if colonies_root is None:
-        colonies_root = Path.home() / ".hive" / "colonies"
+        from framework.config import COLONIES_DIR
+
+        colonies_root = COLONIES_DIR
     if not colonies_root.is_dir():
         return []
 

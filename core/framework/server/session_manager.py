@@ -546,8 +546,10 @@ class SessionManager:
         session.colony_name = colony_id
         session.worker_path = agent_path
 
-        # Worker storage: ~/.hive/agents/{colony_name}/{worker_name}/
-        worker_storage = Path.home() / ".hive" / "agents" / colony_id / worker_name
+        # Worker storage: $HIVE_HOME/agents/{colony_name}/{worker_name}/
+        from framework.config import HIVE_HOME
+
+        worker_storage = HIVE_HOME / "agents" / colony_id / worker_name
         worker_storage.mkdir(parents=True, exist_ok=True)
 
         # Copy conversations from colony if fresh
@@ -927,7 +929,9 @@ class SessionManager:
            that process is still running on the host. If it is, the session is
            owned by another healthy worker process, so leave it alone.
         """
-        sessions_path = Path.home() / ".hive" / "agents" / agent_path.name / "sessions"
+        from framework.config import HIVE_HOME
+
+        sessions_path = HIVE_HOME / "agents" / agent_path.name / "sessions"
         if not sessions_path.exists():
             return
 

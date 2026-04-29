@@ -62,10 +62,14 @@ _STALE_DEFAULT_ALIASES: dict[str, str] = {
 
 
 class MCPRegistry:
-    """Manages local MCP server state in ~/.hive/mcp_registry/."""
+    """Manages local MCP server state in $HIVE_HOME/mcp_registry/."""
 
     def __init__(self, base_path: Path | None = None):
-        self._base = base_path or Path.home() / ".hive" / "mcp_registry"
+        if base_path is None:
+            from framework.config import HIVE_HOME
+
+            base_path = HIVE_HOME / "mcp_registry"
+        self._base = base_path
         self._installed_path = self._base / "installed.json"
         self._config_path = self._base / "config.json"
         self._cache_dir = self._base / "cache"

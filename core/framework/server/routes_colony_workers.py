@@ -294,7 +294,9 @@ def _resolve_progress_db_by_name(colony_name: str) -> Path | None:
     """
     if not _COLONY_NAME_RE.match(colony_name):
         return None
-    db_path = Path.home() / ".hive" / "colonies" / colony_name / "data" / "progress.db"
+    from framework.config import COLONIES_DIR
+
+    db_path = COLONIES_DIR / colony_name / "data" / "progress.db"
     return db_path if db_path.exists() else None
 
 

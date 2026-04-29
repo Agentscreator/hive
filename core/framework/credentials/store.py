@@ -751,7 +751,9 @@ class CredentialStore:
 
         # Determine local storage path
         if local_path is None:
-            local_path = str(Path.home() / ".hive" / "credentials")
+            from framework.config import HIVE_HOME
+
+            local_path = str(HIVE_HOME / "credentials")
 
         local_storage = EncryptedFileStorage(base_path=local_path)
 

@@ -1,5 +1,6 @@
 """aiohttp Application factory for the Hive HTTP API server."""
 
+import hmac
 import logging
 import os
 from pathlib import Path
@@ -21,7 +22,9 @@ _ALLOWED_AGENT_ROOTS: tuple[Path, ...] | None = None
 
 def _has_encrypted_credentials() -> bool:
     """Return True when an encrypted credential store already exists on disk."""
-    cred_dir = Path.home() / ".hive" / "credentials" / "credentials"
+    from framework.config import HIVE_HOME
+
+    cred_dir = HIVE_HOME / "credentials" / "credentials"
     return cred_dir.is_dir() and any(cred_dir.glob("*.enc"))
 
 
@@ -30,17 +33,18 @@ def _get_allowed_agent_roots() -> tuple[Path, ...]:
 
     Roots are anchored to the repository root (derived from ``__file__``)
     so the allowlist is correct regardless of the process's working
-    directory.
+    directory. The hive-home subtrees honour ``HIVE_HOME`` so the desktop's
+    per-user root is allowed in addition to (or instead of) ``~/.hive``.
     """
     global _ALLOWED_AGENT_ROOTS
     if _ALLOWED_AGENT_ROOTS is None:
-        from framework.config import COLONIES_DIR
+        from framework.config import COLONIES_DIR, HIVE_HOME
 
         _ALLOWED_AGENT_ROOTS = (
-            COLONIES_DIR.resolve(),  # ~/.hive/colonies/
+            COLONIES_DIR.resolve(),  # $HIVE_HOME/colonies/
             (_REPO_ROOT / "exports").resolve(),  # compat fallback
             (_REPO_ROOT / "examples").resolve(),
-            (Path.home() / ".hive" / "agents").resolve(),
+            (HIVE_HOME / "agents").resolve(),
         )
     return _ALLOWED_AGENT_ROOTS
 
@@ -62,7 +66,8 @@ def validate_agent_path(agent_path: str | Path) -> Path:
         if resolved.is_relative_to(root) and resolved != root:
             return resolved
     raise ValueError(
-        "agent_path must be inside an allowed directory (~/.hive/colonies/, exports/, examples/, or ~/.hive/agents/)"
+        "agent_path must be inside an allowed directory "
+        "($HIVE_HOME/colonies/, exports/, examples/, or $HIVE_HOME/agents/)"
     )
 
 
@@ -94,13 +99,15 @@ def resolve_session(request: web.Request):
 def sessions_dir(session: Session) -> Path:
     """Resolve the worker sessions directory for a session.
 
-    Storage layout: ~/.hive/agents/{agent_name}/sessions/
+    Storage layout: $HIVE_HOME/agents/{agent_name}/sessions/
     Requires a worker to be loaded (worker_path must be set).
     """
     if session.worker_path is None:
         raise ValueError("No worker loaded — no worker sessions directory")
+    from framework.config import HIVE_HOME
+
     agent_name = session.worker_path.name
-    return Path.home() / ".hive" / "agents" / agent_name / "sessions"
+    return HIVE_HOME / "agents" / agent_name / "sessions"
 
 
 # Allowed CORS origins (localhost on any port)
@@ -157,6 +164,28 @@ async def no_cache_api_middleware(request: web.Request, handler):
     if request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# ---------------------------------------------------------------------------
+# Desktop shared-secret auth middleware.
+#
+# When the runtime is spawned by the Electron main process, a fresh random
+# token is passed via ``HIVE_DESKTOP_TOKEN``. Every request from main must
+# carry the matching ``X-Hive-Token`` header. If the env var is unset (e.g.
+# running ``hive serve`` directly from a terminal), the check is skipped —
+# OSS behaviour is preserved.
+# ---------------------------------------------------------------------------
+_EXPECTED_DESKTOP_TOKEN: str | None = os.environ.get("HIVE_DESKTOP_TOKEN") or None
+
+
+@web.middleware
+async def desktop_auth_middleware(request: web.Request, handler):
+    if _EXPECTED_DESKTOP_TOKEN is None:
+        return await handler(request)
+    provided = request.headers.get("X-Hive-Token", "")
+    if not hmac.compare_digest(provided, _EXPECTED_DESKTOP_TOKEN):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    return await handler(request)
 
 
 @web.middleware
@@ -287,7 +316,12 @@ def create_app(model: str | None = None) -> web.Application:
     Returns:
         Configured aiohttp Application ready to run.
     """
-    app = web.Application(middlewares=[cors_middleware, no_cache_api_middleware, error_middleware])
+    # Desktop mode: the runtime is always a subprocess of the Electron main
+    # process, which reaches it via IPC and the `hive://` custom protocol.
+    # There is no browser origin to authorize, so CORS is unnecessary.
+    # The auth middleware enforces the shared-secret token when the env var
+    # is set (i.e. when Electron spawned us); it is a no-op otherwise.
+    app = web.Application(middlewares=[desktop_auth_middleware, no_cache_api_middleware, error_middleware])
 
     # Initialize credential store (before SessionManager so it can be shared)
     from framework.credentials.store import CredentialStore
@@ -392,9 +426,22 @@ def create_app(model: str | None = None) -> web.Application:
     register_skills_routes(app)
     register_task_routes(app)
 
-    # Static file serving — Option C production mode
-    # If frontend/dist/ exists, serve built frontend files on /
-    _setup_static_serving(app)
+    # Commercial extensions (optional — only present in hive-desktop-runtime).
+    # Imports lazily so an OSS install without the `commercial` package keeps
+    # working unchanged.
+    try:
+        from commercial.middleware import setup_commercial_middleware
+        from commercial.routes import register_routes as register_commercial_routes
+
+        setup_commercial_middleware(app)
+        register_commercial_routes(app)
+        logger.info("Commercial extensions loaded")
+    except ImportError:
+        pass
+
+    # Desktop mode: no static file serving. The frontend lives in the
+    # Electron renderer process and is loaded from file:// (or the Vite
+    # dev server in dev mode) — not from this aiohttp app.
 
     return app
 

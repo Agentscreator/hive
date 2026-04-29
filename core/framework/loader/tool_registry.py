@@ -515,7 +515,9 @@ class ToolRegistry:
             if "--project-root" not in args:
                 args.extend(["--project-root", project_root])
             if "--write-root" not in args:
-                _write_root = Path.home() / ".hive" / "workspace"
+                from framework.config import HIVE_HOME
+
+                _write_root = HIVE_HOME / "workspace"
                 _write_root.mkdir(parents=True, exist_ok=True)
                 args.extend(["--write-root", str(_write_root)])
             config["args"] = args

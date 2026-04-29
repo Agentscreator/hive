@@ -50,8 +50,10 @@ _ENDPOINTS = [
 _DEFAULT_PROJECT_ID = "rising-fact-p41fc"
 _TOKEN_REFRESH_BUFFER_SECS = 60
 
-# Credentials file in ~/.hive/ (native implementation)
-_ACCOUNTS_FILE = Path.home() / ".hive" / "antigravity-accounts.json"
+# Credentials file in $HIVE_HOME (native implementation)
+from framework.config import HIVE_HOME as _HIVE_HOME
+
+_ACCOUNTS_FILE = _HIVE_HOME / "antigravity-accounts.json"
 _IDE_STATE_DB_MAC = (
     Path.home() / "Library" / "Application Support" / "Antigravity" / "User" / "globalStorage" / "state.vscdb"
 )

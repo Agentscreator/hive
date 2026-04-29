@@ -42,7 +42,9 @@ def _open_event_log() -> IO[str] | None:
         return None
     raw = _DEBUG_EVENTS_RAW
     if raw.lower() in ("1", "true", "full"):
-        log_dir = Path.home() / ".hive" / "event_logs"
+        from framework.config import HIVE_HOME
+
+        log_dir = HIVE_HOME / "event_logs"
     else:
         log_dir = Path(raw)
     log_dir.mkdir(parents=True, exist_ok=True)

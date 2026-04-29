@@ -560,7 +560,9 @@ class CredentialTesterAgent:
         if self._selected_account is None:
             raise RuntimeError("No account selected. Call select_account() first.")
 
-        self._storage_path = Path.home() / ".hive" / "agents" / "credential_tester"
+        from framework.config import HIVE_HOME
+
+        self._storage_path = HIVE_HOME / "agents" / "credential_tester"
         self._storage_path.mkdir(parents=True, exist_ok=True)
 
         self._tool_registry = ToolRegistry()

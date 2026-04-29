@@ -1094,8 +1094,10 @@ async def handle_delete_agent(request: web.Request) -> web.Response:
     except ValueError as exc:
         return web.json_response({"error": str(exc)}, status=400)
 
-    # Reject deletion of framework agents (~/.hive/agents/) — those are internal
-    hive_agents_dir = Path.home() / ".hive" / "agents"
+    # Reject deletion of framework agents ($HIVE_HOME/agents/) — those are internal
+    from framework.config import HIVE_HOME
+
+    hive_agents_dir = HIVE_HOME / "agents"
     if resolved.is_relative_to(hive_agents_dir):
         return web.json_response({"error": "Cannot delete framework agents"}, status=403)
 

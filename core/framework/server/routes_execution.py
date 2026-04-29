@@ -1245,7 +1245,9 @@ async def fork_session_into_colony(
     # would wrongly flag every fresh colony as "already-exists" if we
     # used ``not colony_dir.exists()``. A colony is "new" until its
     # worker config has actually been written.
-    colony_dir = Path.home() / ".hive" / "colonies" / colony_name
+    from framework.config import COLONIES_DIR
+
+    colony_dir = COLONIES_DIR / colony_name
     worker_name = "worker"
     worker_config_path = colony_dir / f"{worker_name}.json"
     is_new = not worker_config_path.exists()
@@ -1469,7 +1471,9 @@ async def fork_session_into_colony(
 
         compaction_status.mark_in_progress(dest_queen_dir)
 
-        _worker_storage = Path.home() / ".hive" / "agents" / colony_name / worker_name
+        from framework.config import HIVE_HOME
+
+        _worker_storage = HIVE_HOME / "agents" / colony_name / worker_name
         _dest_queen_dir = dest_queen_dir
         _queen_ctx = queen_ctx
         _queen_loop = queen_loop

@@ -1699,7 +1699,9 @@ def register_queen_lifecycle_tools(
         # INSIDE it (project scope, colony-local). fork_session_into_colony
         # keys "is_new" off worker.json rather than the dir itself, so
         # pre-creating here does not wrongly flag fresh colonies as "old".
-        colony_dir = Path.home() / ".hive" / "colonies" / cn
+        from framework.config import COLONIES_DIR
+
+        colony_dir = COLONIES_DIR / cn
         try:
             colony_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -2479,7 +2481,9 @@ def register_queen_lifecycle_tools(
             ensure_progress_db as _ensure_db,
         )
 
-        colony_dir = _Path.home() / ".hive" / "colonies" / cn
+        from framework.config import COLONIES_DIR as _COLONIES_DIR
+
+        colony_dir = _COLONIES_DIR / cn
         if not colony_dir.is_dir():
             return json.dumps({"error": f"colony '{cn}' not found"})
 

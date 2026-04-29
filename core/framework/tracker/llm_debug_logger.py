@@ -15,7 +15,13 @@ from typing import IO, Any
 
 logger = logging.getLogger(__name__)
 
-_LLM_DEBUG_DIR = Path.home() / ".hive" / "llm_logs"
+def _llm_debug_dir() -> Path:
+    """Resolve $HIVE_HOME/llm_logs lazily so the env override (set by the
+    desktop) takes effect. A module-level constant would freeze whatever
+    HIVE_HOME was at import time and miss late-bound test overrides."""
+    from framework.config import HIVE_HOME
+
+    return HIVE_HOME / "llm_logs"
 
 _log_file: IO[str] | None = None
 _log_ready = False  # lazy init guard
@@ -23,9 +29,10 @@ _log_ready = False  # lazy init guard
 
 def _open_log() -> IO[str] | None:
     """Open the JSONL log file for this process."""
-    _LLM_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    debug_dir = _llm_debug_dir()
+    debug_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = _LLM_DEBUG_DIR / f"{ts}.jsonl"
+    path = debug_dir / f"{ts}.jsonl"
     logger.info("LLM debug log → %s", path)
     return open(path, "a", encoding="utf-8")  # noqa: SIM115
 

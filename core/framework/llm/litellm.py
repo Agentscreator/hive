@@ -45,17 +45,19 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _api_base_needs_bearer_auth(api_base: str | None) -> bool:
-    """Return True when ``api_base`` points at an Anthropic-compatible endpoint
+    """Return True when api_base points at an Anthropic-compatible endpoint
     that authenticates via ``Authorization: Bearer`` rather than ``x-api-key``.
 
-    The hive-llm proxy (Rust service in hive-backend/llm/) speaks the Anthropic
-    Messages API but mints user-scoped JWTs and validates them via Bearer auth.
-    Default upstream Anthropic endpoints (api.anthropic.com, Kimi's
-    api.kimi.com/coding) keep using x-api-key, so the override is scoped to the
-    known hive-proxy hosts plus the env-configured override.
+    The Hive LLM proxy (Rust service in hive-backend/llm/) speaks the
+    Anthropic Messages API but mints user-scoped JWTs and validates them
+    via Bearer auth. Default upstream Anthropic endpoints (api.anthropic.com,
+    Kimi's api.kimi.com/coding) keep using x-api-key, so the override is
+    scoped to known hive-proxy hosts plus the env-configured override.
     """
     if not api_base:
         return False
+    # Strip protocol, port, and path so a plain hostname compare is enough
+    # for the common cases.
     lowered = api_base.lower()
     for host in ("adenhq.com", "open-hive.com", "127.0.0.1:8890", "localhost:8890"):
         if host in lowered:
@@ -67,19 +69,16 @@ def _api_base_needs_bearer_auth(api_base: str | None) -> bool:
 
 
 def _patch_litellm_anthropic_oauth() -> None:
-    """Patch litellm's Anthropic header construction to fix OAuth/JWT token handling.
+    """Patch litellm's Anthropic header construction to fix OAuth token handling.
 
-    Two cases are remapped:
-    1. **Anthropic OAuth tokens** (``sk-ant-oat`` prefix). litellm puts the token
-       into ``x-api-key`` but Anthropic's API requires it on
-       ``Authorization: Bearer`` only — see BerriAI/litellm#19618.
-    2. **Hive LLM proxy bearer tokens** (any JWT). The Rust proxy at
-       hive-backend/llm/ speaks the Anthropic Messages API but authenticates
-       with ``Authorization: Bearer <jwt>``; litellm's default ``x-api-key``
-       would 401.
+    litellm bug: validate_environment() puts the OAuth token into x-api-key,
+    but Anthropic's API rejects OAuth tokens in x-api-key. They must be sent
+    via Authorization: Bearer only, with x-api-key omitted entirely.
 
-    Both cases share the same fix: promote whatever's in ``x-api-key`` to
-    ``Authorization: Bearer`` and drop ``x-api-key``.
+    This patch wraps validate_environment to remove x-api-key when the
+    Authorization header carries an OAuth token (sk-ant-oat prefix).
+
+    See: https://github.com/BerriAI/litellm/issues/19618
     """
     try:
         from litellm.llms.anthropic.common_utils import AnthropicModelInfo
@@ -120,15 +119,6 @@ def _patch_litellm_anthropic_oauth() -> None:
         oauth_prefix = f"Bearer {ANTHROPIC_OAUTH_TOKEN_PREFIX}"
         auth_is_oauth = auth.startswith(oauth_prefix)
         key_is_oauth = x_api_key.startswith(ANTHROPIC_OAUTH_TOKEN_PREFIX)
-        # The hive-llm proxy speaks the Anthropic Messages API but authenticates
-        # via Authorization: Bearer <jwt>; x-api-key is ignored and returns
-        # missing_auth. Promote x-api-key → Authorization for those endpoints
-        # so hive's per-user stream JWT actually authenticates the request.
-        hive_needs_remap = (
-            x_api_key
-            and not auth
-            and _api_base_needs_bearer_auth(api_base)
-        )
         if auth_is_oauth or key_is_oauth:
             token = x_api_key if key_is_oauth else auth.removeprefix("Bearer ").strip()
             result.pop("x-api-key", None)
@@ -139,9 +129,6 @@ def _patch_litellm_anthropic_oauth() -> None:
             if ANTHROPIC_OAUTH_BETA_HEADER not in beta_parts:
                 beta_parts.append(ANTHROPIC_OAUTH_BETA_HEADER)
             result["anthropic-beta"] = ",".join(beta_parts)
-        elif hive_needs_remap:
-            result.pop("x-api-key", None)
-            result["authorization"] = f"Bearer {x_api_key}"
         return result
 
     AnthropicModelInfo.validate_environment = _patched_validate_environment
@@ -390,10 +377,16 @@ OPENROUTER_TOOL_COMPAT_MODEL_CACHE: dict[str, float] = {}
 # from rate-limit retries — 3 retries is sufficient for connection failures.
 STREAM_TRANSIENT_MAX_RETRIES = 3
 
-# Directory for dumping failed requests
-FAILED_REQUESTS_DIR = Path.home() / ".hive" / "failed_requests"
+# Directory for dumping failed requests. Resolved lazily so HIVE_HOME
+# overrides (set by the desktop shell) take effect even if this module
+# is imported before framework.config picks up the override.
+def _failed_requests_dir() -> Path:
+    from framework.config import HIVE_HOME
 
-# Maximum number of dump files to retain in ~/.hive/failed_requests/.
+    return HIVE_HOME / "failed_requests"
+
+
+# Maximum number of dump files to retain in $HIVE_HOME/failed_requests/.
 # Older files are pruned automatically to prevent unbounded disk growth.
 MAX_FAILED_REQUEST_DUMPS = 50
 
@@ -585,7 +578,7 @@ def _prune_failed_request_dumps(max_files: int = MAX_FAILED_REQUEST_DUMPS) -> No
     """
     try:
         all_dumps = sorted(
-            FAILED_REQUESTS_DIR.glob("*.json"),
+            _failed_requests_dir().glob("*.json"),
             key=lambda f: f.stat().st_mtime,
         )
         excess = len(all_dumps) - max_files
@@ -620,11 +613,12 @@ def _dump_failed_request(
 ) -> str:
     """Dump failed request to a file for debugging. Returns the file path."""
     try:
-        FAILED_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
+        dump_dir = _failed_requests_dir()
+        dump_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         filename = f"{error_type}_{model.replace('/', '_')}_{timestamp}.json"
-        filepath = FAILED_REQUESTS_DIR / filename
+        filepath = dump_dir / filename
 
         # Build dump data
         messages = kwargs.get("messages", [])
@@ -654,7 +648,7 @@ def _dump_failed_request(
 
         return str(filepath)
     except OSError as e:
-        logger.warning(f"Failed to dump request debug log to {FAILED_REQUESTS_DIR}: {e}")
+        logger.warning(f"Failed to dump request debug log to {_failed_requests_dir()}: {e}")
         return "log_write_failed"
 
 
@@ -2207,9 +2201,10 @@ class LiteLLMProvider(LLMProvider):
         if logger.isEnabledFor(logging.DEBUG) and full_messages:
             import json as _json
             from datetime import datetime as _dt
-            from pathlib import Path as _Path
 
-            _debug_dir = _Path.home() / ".hive" / "debug_logs"
+            from framework.config import HIVE_HOME as _HIVE_HOME
+
+            _debug_dir = _HIVE_HOME / "debug_logs"
             _debug_dir.mkdir(parents=True, exist_ok=True)
             _ts = _dt.now().strftime("%Y%m%d_%H%M%S_%f")
             _dump_file = _debug_dir / f"llm_request_{_ts}.json"

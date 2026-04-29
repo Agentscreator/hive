@@ -30,8 +30,16 @@ _ENV_TRUST_ALL = "HIVE_TRUST_PROJECT_SKILLS"
 # Env var for comma-separated own-remote glob patterns (e.g. "github.com/myorg/*").
 _ENV_OWN_REMOTES = "HIVE_OWN_REMOTES"
 
-_TRUSTED_REPOS_PATH = Path.home() / ".hive" / "trusted_repos.json"
-_NOTICE_SENTINEL_PATH = Path.home() / ".hive" / ".skill_trust_notice_shown"
+def _trusted_repos_path() -> Path:
+    from framework.config import HIVE_HOME
+
+    return HIVE_HOME / "trusted_repos.json"
+
+
+def _notice_sentinel_path() -> Path:
+    from framework.config import HIVE_HOME
+
+    return HIVE_HOME / ".skill_trust_notice_shown"
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +58,7 @@ class TrustedRepoStore:
     """Persists permanently-trusted repo keys to ~/.hive/trusted_repos.json."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self._path = path or _TRUSTED_REPOS_PATH
+        self._path = path or _trusted_repos_path()
         self._entries: dict[str, TrustedRepoEntry] = {}
         self._loaded = False
 
@@ -224,7 +232,9 @@ class ProjectTrustDetector:
             patterns.extend(p.strip() for p in raw.split(",") if p.strip())
 
         # From ~/.hive/own_remotes file
-        own_remotes_file = Path.home() / ".hive" / "own_remotes"
+        from framework.config import HIVE_HOME
+
+        own_remotes_file = HIVE_HOME / "own_remotes"
         if own_remotes_file.is_file():
             try:
                 for line in own_remotes_file.read_text(encoding="utf-8").splitlines():
@@ -415,7 +425,8 @@ class TrustGate:
 
     def _maybe_show_security_notice(self, Colors) -> None:  # noqa: N803
         """Show the one-time security notice if not already shown (NFR-5)."""
-        if _NOTICE_SENTINEL_PATH.exists():
+        sentinel = _notice_sentinel_path()
+        if sentinel.exists():
             return
         self._print("")
         self._print(
@@ -427,8 +438,8 @@ class TrustGate:
         )
         self._print("")
         try:
-            _NOTICE_SENTINEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-            _NOTICE_SENTINEL_PATH.touch()
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            sentinel.touch()
         except OSError:
             pass
 
