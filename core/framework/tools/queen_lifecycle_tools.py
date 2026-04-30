@@ -2440,7 +2440,6 @@ def register_queen_lifecycle_tools(
         if not _COLONY_NAME_RE.match(cn):
             return json.dumps({"error": "colony_name must be lowercase alphanumeric with underscores"})
 
-
         from framework.config import COLONIES_DIR as _COLONIES_DIR
         from framework.host.progress_db import (
             enqueue_task as _enqueue_task,
