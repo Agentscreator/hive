@@ -193,8 +193,7 @@ class MCPRegistry:
             self._write_installed(data)
         if repaired:
             logger.warning(
-                "MCPRegistry._seed_defaults: repaired %d default server(s) with "
-                "unreachable cwd/script: %s",
+                "MCPRegistry._seed_defaults: repaired %d default server(s) with unreachable cwd/script: %s",
                 len(repaired),
                 repaired,
             )
@@ -220,9 +219,7 @@ class MCPRegistry:
         return added
 
     @staticmethod
-    def _default_entry_runnable(
-        entry: dict, tools_dir: Path, canonical_args: list[str]
-    ) -> bool:
+    def _default_entry_runnable(entry: dict, tools_dir: Path, canonical_args: list[str]) -> bool:
         """Return True iff ``entry`` can plausibly be spawned on this machine.
 
         Checks:
